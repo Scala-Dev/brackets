@@ -172,6 +172,11 @@ Bramble.on("readyStateChange", function(previous, current) {
 });
 ```
 
+NOTE: in some browsers (e.g., Firefox) when the user is in "Private Browsing"
+mode, the filesystem (i.e., IndexedDB) will be inaccessible, and an error
+will be sent via the `error` event (i.e., `err.code === "EFILESYSTEMERROR"`).  This
+is the same error that occurs when the filesystem is corrupt (see `autoRecoverFileSystem` below).
+
 ## Bramble.getFileSystem()
 
 The FileSystem is owned by the hosting application, and can be obtained at any time by calling:
@@ -182,6 +187,29 @@ var fs = Bramble.getFileSystem();
 
 This `fs` instance can be used to setup the filesystem for the Bramble editor prior to
 loading.  You can access things like `Path` and `Buffer` via `Bramble.Filer.*`.
+
+## Bramble.formatFileSystem(callback)
+
+WARNING: this **will** destroy data, and is meant to be used in the case that
+the filesystem is corrupted (`err.code === "EFILESYSTEMERROR"`), or for when an
+app wants to allow a user to wipe their disk.
+
+```js
+Bramble.on("error", function(err) {
+  if(err.code === "EFILESYSTEMERROR") {
+    Bramble.formatFileSystem(function(err) {
+      if(err) {
+        // Unable to create filesystem, fatal (and highly unlikely) error
+      } else {
+        // filesystem is now clean and empty, use Bramble.getFileSystem() to obtain instance
+      }
+    });
+  }
+});
+```
+
+NOTE: you can turn this recovery behaviour on automatically by passing `autoRecoverFileSystem: true`
+in the options to `Bramble.load()`.
 
 ## Bramble.load(elem[, options])
 
@@ -210,6 +238,7 @@ The `options` object allows you to configure Bramble:
      * `disable`: `<Array(String)>` a list of extensions to disable
  * `hideUntilReady`: `<Boolean>` whether to hide Bramble until it's fully loaded.
  * `disableUIState`: `<Boolean>` by default, UI state is kept between sessions.  This disables it (and clears old values), and uses the defaults from Bramble.
+ * `autoRecoverFileSystem`: `<Boolean>` whether to try and autorecover the filesystem on failure (see `Bramble.formatFileSystem` above).
  * `debug`: `<Boolean>` whether to log debug info.
 
 ## Bramble.mount(root[, filename])
@@ -313,8 +342,7 @@ to be notified when the action completes:
 * `showTutorial([callback])` - shows tutorial (i.e., tutorial.html) vs editor contents in preview
 * `hideTutorial([callback])` - stops showing tutorial (i.e., tutorial.html) and uses editor contents in preview
 * `showUploadFilesDialog([callback])` - shows the Upload Files dialog, allowing users to drag-and-drop, upload a file, or take a selfie.
-* `addNewFile([ext, callback])` - adds a new file, using the optional `ext` as an extension if provided.
-* `addNewFileWithContents(filename, contents[, callback])` - adds a new file to the mounted project's root dir with the given `filename` and `contents` (`Filer.Buffer` or `String`).
+* `addNewFile([options, callback])` - adds a new file, using the provided options, which can include: `filename` a `String` with the complete filename to use; `contents` a `Filer.Buffer` or `String` with the new file's data; `ext` a `String` with the new file's extension; `basenamePrefix` a `String` with the basename to use when generating a new filename.  NOTE: if you provide `filename`, `basenamePrefix` and `ext` are ignored.
 * `addNewFolder([callback])` - adds a new folder.
 * `export([callback])` - creates an archive `.zip` file of the entire project's filesystem, and downloads it to the browser.
 

@@ -86,7 +86,24 @@ define([
         }
         // When we go into the ERROR state, also trigger an event and pass err
         else if (_readyState === Bramble.ERROR) {
-            Bramble.trigger("error", [err]);
+            // Treat filesystem corruption as a special case
+            if(err && err.code === "EFILESYSTEMERROR") {
+                if(_instance._autoRecoverFileSystem) {
+                    Bramble.formatFileSystem(function(err2) {
+                        if(err2) {
+                            console.error("[Bramble] unable to access browser filesystem:", err2);
+                        } else {
+                            console.log("[Bramble] browser filesystem auto-recovered, refresh page.");
+                        }
+                        Bramble.trigger("error", [err]);
+                    });
+                } else {
+                    console.error("[Bramble] browser filesystem inaccessible (needs to be re-formatted, or permission denied due to private browsing mode.");
+                    Bramble.trigger("error", [err]);
+                }
+            } else {
+                Bramble.trigger("error", [err]);
+            }
         }
     }
     Bramble.getReadyState = function() { return _readyState; };
@@ -96,6 +113,10 @@ define([
     var _fs = new Filer.FileSystem();
     Bramble.getFileSystem = function() {
         return _fs;
+    };
+    // NOTE: THIS WILL DESTROY DATA! For error cases only, or to wipe the disk.
+    Bramble.formatFileSystem = function(callback) {
+        _fs = new Filer.FileSystem({flags: ["FORMAT"]}, callback);
     };
 
     Bramble.setFileSystem = function(fs) {
@@ -172,6 +193,9 @@ define([
 
         // Callback functions waiting for a postMessage from Bramble
         var _callbacks = {};
+
+        // Whether or not we want to try and auto-recover a corrupted filesystem on error
+        self._autoRecoverFileSystem = options.autoRecoverFileSystem;
 
         // Public getters for state. Most of these aren't useful until bramble.ready()
         self.getID = function() { return _id; };
@@ -440,6 +464,14 @@ define([
             return function callback(err, result) {
                 var transferable;
 
+                // If the filesystem is inaccessbile, or corrupt, we might not get proper
+                // error handling in the filesystem constructor, and it might end up getting
+                // here.  If it does, it's fatal, and we should trigger an error to the hosting app.
+                if(err && err.code === "EFILESYSTEMERROR") {
+                    setReadyState(Bramble.ERROR, err);
+                    return;
+                }
+
                 // If the second arg is a Filer Buffer (i.e., wrapped Uint8Array),
                 // get a reference to the underlying ArrayBuffer for transport.
                 if (FilerBuffer.isBuffer(result)) {
@@ -685,27 +717,19 @@ define([
         this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_SHOW_UPLOAD_FILES_DIALOG"}, callback);
     };
 
-    BrambleProxy.prototype.addNewFile = function(ext, callback) {
-        if(ext) {
-            this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_ADD_NEW_FILE", args: ext}, callback);
-        } else {
-            this._executeRemoteCommand({commandCategory: "brackets", command: "FILE_NEW"}, callback);
-        }
-    };
-
-    BrambleProxy.prototype.addNewFileWithContents = function(filename, contents, callback) {
-        // Always send a buffer
-        if(typeof(contents) === "string") {
-            contents = new FilerBuffer(contents, "utf8");
+    BrambleProxy.prototype.addNewFile = function(options, callback) {
+        // Always use a buffer if we send contents
+        if(typeof(options.contents) === "string") {
+            options.contents = new FilerBuffer(options.contents, "utf8");
         }
 
-        // Serialize to a regular array
-        contents = contents.toJSON().data;
+        // Serialize buffer to a regular array
+        options.contents = options.contents.toJSON().data;
 
         this._executeRemoteCommand({
             commandCategory: "bramble",
-            command: "BRAMBLE_ADD_NEW_FILE_WITH_CONTENTS",
-            args: [filename, contents]
+            command: "BRAMBLE_ADD_NEW_FILE",
+            args: [options]
         }, callback);
     };
 

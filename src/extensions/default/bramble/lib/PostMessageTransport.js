@@ -21,6 +21,7 @@ define(function (require, exports, module) {
     // The script that will be injected into the previewed HTML to handle the other side of the post message connection.
     var PostMessageTransportRemote = require("text!lib/PostMessageTransportRemote.js");
     var Tutorial = require("lib/Tutorial");
+    var ScrollManager = require("lib/ScrollManager");
 
     // An XHR shim will be injected as well to allow XHR to the file system
     var XHRShim = require("text!lib/xhr/XHRShim.js");
@@ -164,9 +165,16 @@ define(function (require, exports, module) {
      * @return {string}
      */
     function getRemoteScript() {
+        var currentDoc = LiveDevMultiBrowser._getCurrentLiveDoc();
+        var currentPath;
+        if(currentDoc) {
+            currentPath = currentDoc.doc.file.fullPath;
+        }
+
         return '<base href="' + window.location.href + '">\n' +
             "<script>\n" + PostMessageTransportRemote + "</script>\n" +
-            "<script>\n" + XHRShim + "</script>\n";
+            "<script>\n" + XHRShim + "</script>\n" +
+            ScrollManager.getRemoteScript(currentPath);
     }
 
     // URL of document being rewritten/launched (if any)
@@ -175,7 +183,14 @@ define(function (require, exports, module) {
     function reload() {
         var launcher = Launcher.getCurrentInstance();
         var liveDoc = LiveDevMultiBrowser._getCurrentLiveDoc();
-        var url = BlobUtils.getUrl(liveDoc.doc.file.fullPath);
+        var url;
+
+        // Don't go any further if we don't have a live doc yet (nothing to reload)
+        if(!liveDoc) {
+            return;
+        }
+
+        url = BlobUtils.getUrl(liveDoc.doc.file.fullPath);
 
         // Don't start rewriting a URL if it's already in process (prevents infinite loop)
         if(_pendingReloadUrl === url) {
