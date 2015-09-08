@@ -108,6 +108,11 @@ define([
     }
     Bramble.getReadyState = function() { return _readyState; };
 
+    Bramble.destroy = function() {
+        _readyState = null;
+        _instance = null;
+    };
+
     // Expose Filer for Path, Buffer, providers, etc.
     Bramble.Filer = Filer;
     var _fs = new Filer.FileSystem();
