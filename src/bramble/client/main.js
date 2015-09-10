@@ -109,6 +109,7 @@ define([
     Bramble.getReadyState = function() { return _readyState; };
 
     Bramble.destroy = function() {
+        Bramble.removeAllListeners();
         _readyState = null;
         _instance = null;
     };
