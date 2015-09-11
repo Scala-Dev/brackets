@@ -21,7 +21,7 @@
  *
  */
 
-/*global define, HTMLElement, MessageChannel, addEventListener*/
+/*global define, HTMLElement, MessageChannel, addEventListener, removeEventListener*/
 
 define([
     // Change this to filer vs. filer.min if you need to debug Filer
@@ -110,6 +110,12 @@ define([
 
     Bramble.destroy = function() {
         Bramble.removeAllListeners();
+
+        if (_instance) {
+            removeEventListener("resize", _instance.resizer);
+            removeEventListener("message", _instance.messager);
+        }
+
         _readyState = null;
         _instance = null;
     };
@@ -231,11 +237,12 @@ define([
 
         function startEvents(win) {
             // Listen for resize events on the window, and let Bramble know
-            addEventListener("resize", function(e) {
+            self.resizer = function(e) {
                 self._executeRemoteCommand({commandCategory: "bramble", command: "RESIZE"});
-            });
+            };
+            addEventListener("resize", self.resizer);
 
-            addEventListener("message", function(e) {
+            self.messager = function(e) {
                 var data = parseEventData(e.data);
 
                 // When Bramble is ready for the filesystem to be mounted, it will let us know
@@ -314,7 +321,9 @@ define([
                     debug("triggering remote event", eventName, data);
                     self.trigger(eventName, [data]);
                 }
-            });
+            };
+
+            addEventListener("message", self.messager);
         }
 
         function createIFrame() {
