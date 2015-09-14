@@ -579,6 +579,16 @@ define([
                     wrappedCallback(err);
                 }));
                 break;
+            case "mkdir":
+                path = args[0];
+                wrappedCallback = genericFileEventFn("mkdir", args[0], callback);
+                _fs.mkdir.apply(_fs, data.args.concat(wrappedCallback));
+                break;
+            case "rmdir":
+                path = args[0];
+                wrappedCallback = genericFileEventFn("rmdir", args[0], callback);
+                _fs.rmdir.apply(_fs, data.args.concat(wrappedCallback));
+                break;
             case "readFile":
                 _fs.readFile.apply(_fs, args.concat(function(err, data) {
                     // Convert the FilerBuffer to an ArrayBuffer for transport
