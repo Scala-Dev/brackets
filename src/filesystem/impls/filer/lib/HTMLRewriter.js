@@ -1,5 +1,5 @@
 /*jslint vars: true, plusplus: true, devel: true, nomen: true, regexp: true, indent: 4, maxerr: 50 */
-/*global define, DOMParser */
+/*global define, DOMParser, XMLSerializer */
 define(function (require, exports, module) {
     "use strict";
 
@@ -15,6 +15,13 @@ define(function (require, exports, module) {
      * We do this by altering the mime type from text/javascript to text/x-scripts-disabled below.
      */
     var jsEnabled = true;
+
+    /**
+     * Provides a way to force JS to run when disabled, but only once.
+     * Useful when we want to allow the user to manually refresh the page with UI
+     * vs. when we do it automatically.
+     */
+    var jsEnabledOverride = false;
 
     /**
      * Rewrite all external resources (links, scripts, img sources, ...) to
@@ -44,14 +51,13 @@ define(function (require, exports, module) {
                 return;
             }
 
-            BlobUtils.getUrl(fullPath, function(err, url) {
-                if(err) {
-                    console.log("[HTMLRewriter warning] couldn't get URL for `" + fullPath + "`", err);
-                } else {
-                    element[urlType] = url;
-                }
-                callback();
-            });
+            var url = BlobUtils.getUrl(fullPath);
+            if(url === fullPath) {
+                console.log("[HTMLRewriter warning] couldn't get URL for `" + fullPath + "`");
+            } else {
+                element[urlType] = url;
+            }
+            callback();
         }, callback);
     };
 
@@ -115,7 +121,7 @@ define(function (require, exports, module) {
             // If the user has the given CSS file open in an editor,
             // use that; otherwise, get it from disk.
             server.serveLiveDocForPath(fullPath, function(err, url) {
-                if(err) {
+                if(err || url === fullPath) {
                     console.log("[HTMLRewriter warning] couldn't get URL for `" + fullPath + "`", err);
                 } else {
                     element.href = url;
@@ -134,7 +140,7 @@ define(function (require, exports, module) {
                 return;
             }
 
-            if(jsEnabled) {
+            if(jsEnabled || jsEnabledOverride) {
                 if(element.getAttribute("type") === "text/x-scripts-disabled") {
                     element.removeAttribute("type");
                 }
@@ -158,7 +164,13 @@ define(function (require, exports, module) {
         // when we `fs.writeFile()` and generate cached Blob URLs in `handleFile()`).
         // If we don't, use `BlobUtils.getUrl()` instead to read from the fs.
         if(!server) {
-            server = { serveLiveDocForPath: BlobUtils.getUrl };
+            server = {
+                serveLiveDocForPath: function(path, callback) {
+                    setTimeout(function() {
+                        callback(null, BlobUtils.getUrl(path));
+                    }, 0);
+                }
+            };
         }
 
         var rewriter = new HTMLRewriter(path, html, server);
@@ -166,7 +178,9 @@ define(function (require, exports, module) {
         function iterator(functionName) {
             var args = Array.prototype.slice.call(arguments, 1);
             return function(callback) {
-                rewriter[functionName].apply(rewriter, args.concat([callback]));
+                setTimeout(function() {
+                    rewriter[functionName].apply(rewriter, args.concat([callback]));
+                }, 0);
             };
         }
 
@@ -184,9 +198,21 @@ define(function (require, exports, module) {
             iterator("styleSheetLinks"),
             iterator("scripts")
         ], function finishedRewriteSeries(err) {
-            // Return the processed HTML
-            var html = rewriter.doc.documentElement.outerHTML;
-            callback(err, html);
+            var doc = rewriter.doc;
+
+            // Get processed DOM as HTML string
+            var html = doc.documentElement.outerHTML;
+
+            // Figure out this document's doctype, if present
+            var doctype = "";
+            if(doc.doctype) {
+                doctype = (new XMLSerializer()).serializeToString(doc.doctype);
+            }
+
+            // Reset the JS scripts override in case it was set on this run
+            jsEnabledOverride = false;
+
+            callback(err, doctype + html);
         });
     }
 
@@ -196,5 +222,8 @@ define(function (require, exports, module) {
     };
     exports.disableScripts = function() {
         jsEnabled = false;
+    };
+    exports.forceScriptsOnce = function() {
+        jsEnabledOverride = true;
     };
 });

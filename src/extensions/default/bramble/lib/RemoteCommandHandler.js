@@ -16,6 +16,7 @@ define(function (require, exports, module) {
     var _                  = brackets.getModule("thirdparty/lodash");
     var ArchiveUtils       = brackets.getModule("filesystem/impls/filer/ArchiveUtils");
 
+    var MouseManager = require("lib/MouseManager");
     var PostMessageTransport = require("lib/PostMessageTransport");
     var Tutorial = require("lib/Tutorial");
     var Theme = require("lib/Theme");
@@ -66,6 +67,8 @@ define(function (require, exports, module) {
 
         switch(command) {
         case "BRAMBLE_RELOAD":
+            // If JS is disabled, re-enable it just for this next reload.
+            HTMLRewriter.forceScriptsOnce();
             PostMessageTransport.reload();
             break;
         case "BRAMBLE_MOBILE_PREVIEW":
@@ -74,6 +77,12 @@ define(function (require, exports, module) {
         case "BRAMBLE_DESKTOP_PREVIEW":
             UI.showDesktopView();
             break;
+        case "BRAMBLE_ENABLE_FULLSCREEN_PREVIEW":
+            UI.enableFullscreenPreview();
+            break;
+        case "BRAMBLE_DISABLE_FULLSCREEN_PREVIEW":
+            UI.disableFullscreenPreview();
+            break;
         case "BRAMBLE_ENABLE_SCRIPTS":
             HTMLRewriter.enableScripts();
             PostMessageTransport.reload();
@@ -81,6 +90,13 @@ define(function (require, exports, module) {
         case "BRAMBLE_DISABLE_SCRIPTS":
             HTMLRewriter.disableScripts();
             PostMessageTransport.reload();
+            break;
+        case "BRAMBLE_ENABLE_INSPECTOR":
+            MouseManager.enableInspector();
+            break;
+        case "BRAMBLE_DISABLE_INSPECTOR":
+            // Disable the inspector, and clear any marks in the preview/editor
+            MouseManager.disableInspector(true);
             break;
         case "BRAMBLE_LIGHT_THEME":
             Theme.setTheme("light-theme");

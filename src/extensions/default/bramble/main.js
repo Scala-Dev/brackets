@@ -26,6 +26,7 @@ define(function (require, exports, module) {
         ExtensionUtils       = brackets.getModule("utils/ExtensionUtils"),
         PostMessageTransport = require("lib/PostMessageTransport"),
         Path                 = brackets.getModule("filesystem/impls/filer/BracketsFiler").Path,
+        FileSystemCache      = brackets.getModule("filesystem/impls/filer/FileSystemCache"),
         BlobUtils            = brackets.getModule("filesystem/impls/filer/BlobUtils"),
         XHRHandler           = require("lib/xhr/XHRHandler"),
         Theme                = require("lib/Theme"),
@@ -36,24 +37,12 @@ define(function (require, exports, module) {
     ExtensionUtils.loadStyleSheet(module, "stylesheets/sidebarTheme.css");
 
     function parseData(data) {
-        var dataReceived = data;
-
         try {
-            data = dataReceived || null;
-            data = JSON.parse(data);
-            data = data || {};
+            data = JSON.parse(data || null);
+            return data || {};
         } catch(err) {
-            // Quick fix: Ignore the 'process-tick' message being sent
-            if(dataReceived === "process-tick") {
-                return false;
-            }
-
-            console.error("Parsing message from thimble failed: ", err);
-
             return false;
         }
-
-        return data;
     }
 
     function handleMessage(message) {
@@ -154,7 +143,7 @@ define(function (require, exports, module) {
 
             deferred.always(function() {
                 // Preload BlobURLs for all assets in the filesystem
-                BlobUtils.preload(root, function(err) {
+                FileSystemCache.refresh(function(err) {
                     if(err) {
                         // Possibly non-critical error, warn at least, but keep going.
                         console.warn("[Bramble] unable to preload all filesystem Blob URLs", err);

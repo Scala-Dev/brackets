@@ -26,13 +26,15 @@ define(function (require, exports, module) {
         "QuickOpenJavaScript",
         "QuickView",
         "WebPlatformDocs",
+        "CodeFolding",
 
         // Custom extensions we want loaded by default
         "bramble",
         "Autosave",
         "brackets-paste-and-indent",
         "BrambleUrlCodeHints",
-        "UploadFiles"
+        "UploadFiles",
+        "bramble-move-file"
     ];
 
     /**
@@ -47,7 +49,6 @@ define(function (require, exports, module) {
         "LESSSupport",
         "CloseOthers",
         "InlineTimingFunctionEditor",
-        "CodeFolding",
         "JSLint",
         "QuickOpenCSS",
         "RecentProjects",

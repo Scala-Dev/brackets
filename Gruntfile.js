@@ -111,6 +111,7 @@ module.exports = function (grunt) {
                             'dependencies.js',
                             'thirdparty/requirejs/require.js',
                             'thirdparty/slowparse/locale/*',
+                            'thirdparty/github-markdown.css',
                             'LiveDevelopment/launch.html',
                             'LiveDevelopment/MultiBrowserImpl/transports/**',
                             'LiveDevelopment/MultiBrowserImpl/launchers/**',
@@ -203,6 +204,8 @@ module.exports = function (grunt) {
             dist: {
                 // Options: https://github.com/jrburke/r.js/blob/master/build/example.build.js
                 options: {
+                    // Disable module loading timeouts, due to the size of what we load
+                    waitSeconds: 0,
                     // `name` and `out` is set by grunt-usemin
                     baseUrl: 'src',
                     optimize: 'uglify2',
@@ -574,7 +577,6 @@ module.exports = function (grunt) {
     // task: build
     grunt.registerTask('build', [
         'jshint:src',
-        'jasmine',
         'clean',
         'less',
         'postcss',

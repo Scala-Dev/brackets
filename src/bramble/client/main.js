@@ -510,7 +510,8 @@ define([
             var callback = getCallbackFn(callbackId);
             var wrappedCallback;
             var args = data.args;
-            var path;
+            var shell = new _fs.Shell();
+            var path, src, dest, options;
 
             // With successful fs operations that create, update, delete, or rename files,
             // we also trigger events on the bramble instance.
@@ -530,6 +531,80 @@ define([
                     }
                     callback(err);
                 };
+            }
+
+            function deleteDirectoryRecursively(directory, callback) {
+                function deleteFile(path, next) {
+                    // If the current path is a directory, do nothing
+                    if(path.endsWith("/")) {
+                        return next();
+                    }
+
+                    _fs.unlink(path, genericFileEventFn("fileDelete", path, next));
+                }
+
+                // Delete files inside the directory and trigger a `fileDelete`
+                shell.find(directory, {exec: deleteFile}, function(err) {
+                    if(err) {
+                        return callback(err);
+                    }
+
+                    shell.rm(directory, {recursive: true}, callback);
+                });
+            }
+
+            function moveFile(filePath, destDir, callback) {
+                var newFilePath = Path.join(destDir, Path.basename(filePath));
+
+                _fs.readFile(filePath, function(err, data) {
+                    if(err) {
+                        return callback(err);
+                    }
+
+                    shell.mkdirp(destDir, function(err) {
+                        if(err) {
+                            return callback(err);
+                        }
+
+                        _fs.writeFile(newFilePath, data, genericFileEventFn("fileChange", newFilePath, callback));
+                    });
+                });
+            }
+
+            function moveEmptyDirectory(dirPath, destDir, callback) {
+                var newEmptyDirPath = Path.join(destDir, Path.basename(dirPath));
+
+                shell.mkdirp(newEmptyDirPath, callback);
+            }
+
+            function move(nodePath, callback) {
+                var destinationDirectory = Path.join(dest, Path.basename(src), Path.dirname(Path.relative(src, nodePath)));
+
+                if(!nodePath.endsWith("/")) {
+                    return moveFile(nodePath, destinationDirectory, callback);
+                }
+
+                // If it is a directory, check to see if it contains
+                // anything. If it does, ignore it as the case above
+                // will eventually create it. If it is empty, create
+                // an empty directory at the destination too.
+                _fs.readdir(nodePath, function(err, contents) {
+                    if(err) {
+                        return callback(err);
+                    }
+
+                    // Directory contains something
+                    if(contents.length > 0) {
+                        return callback();
+                    }
+
+                    // Avoid creating the same directory inside itself
+                    if(nodePath.replace(/\/?$/, "") === src.replace(/\/?$/, "")) {
+                        destinationDirectory = Path.dirname(destinationDirectory);
+                    }
+
+                    moveEmptyDirectory(nodePath, destinationDirectory, callback);
+                });
             }
 
             // Most fs methods can just get run normally, but we have to deal with
@@ -600,8 +675,54 @@ define([
                 _watches[callbackId] = callback;
                 _fs.watch.apply(_fs, data.args.concat(callback));
                 break;
+            case "mv":
+                src = args[0];
+                dest = args[1];
+                _fs.stat(src, function(err, stats) {
+                    if(err) {
+                        return callback(err);
+                    }
+
+                    if(stats.isFile()) {
+                        return moveFile(src, dest, callback);
+                    }
+
+                    shell.find(src, {exec: move}, callback);
+                });
+
+                break;
+            case "rm":
+                path = args[0];
+                options = args[1];
+
+                _fs.readdir(path, function(err, contents) {
+                    if(err) {
+                        // If the path was a file, immediately unlink
+                        // trigger the event, and call the callback
+                        if(err.code === "ENOTDIR") {
+                            return shell.rm(path, genericFileEventFn("fileDelete", path, callback));
+                        }
+
+                        return callback(err);
+                    }
+
+                    // If the directory is empty or *should* be empty (in the
+                    // case of a non-recursive rm), call shell.rm immediately
+                    // without triggering a `fileDelete` event
+                    if(!contents || contents.length < 1 || !options.recursive) {
+                        return shell.rm(path, callback);
+                    }
+
+                    deleteDirectoryRecursively(path, callback);
+                });
+
+                break;
             default:
-                _fs[data.method].apply(_fs, data.args.concat(callback));
+                if(data.shell) {
+                    shell[data.method].apply(shell, args.concat(callback));
+                } else {
+                    _fs[data.method].apply(_fs, args.concat(callback));
+                }
             }
         }
 
@@ -714,12 +835,28 @@ define([
         this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_DESKTOP_PREVIEW"}, callback);
     };
 
+    BrambleProxy.prototype.enableFullscreenPreview = function(callback) {
+        this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_ENABLE_FULLSCREEN_PREVIEW"}, callback);
+    };
+
+    BrambleProxy.prototype.disableFullscreenPreview = function(callback) {
+        this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_DISABLE_FULLSCREEN_PREVIEW"}, callback);
+    };
+
     BrambleProxy.prototype.enableJavaScript = function(callback) {
         this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_ENABLE_SCRIPTS"}, callback);
     };
 
     BrambleProxy.prototype.disableJavaScript = function(callback) {
         this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_DISABLE_SCRIPTS"}, callback);
+    };
+
+    BrambleProxy.prototype.enableInspector = function(callback) {
+        this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_ENABLE_INSPECTOR"}, callback);
+    };
+
+    BrambleProxy.prototype.disableInspector = function(callback) {
+        this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_DISABLE_INSPECTOR"}, callback);
     };
 
     BrambleProxy.prototype.enableWordWrap = function(callback) {
@@ -743,13 +880,11 @@ define([
     };
 
     BrambleProxy.prototype.addNewFile = function(options, callback) {
-        // Always use a buffer if we send contents
-        if(typeof(options.contents) === "string") {
-            options.contents = new FilerBuffer(options.contents, "utf8");
+        // We only support writing textual data this way
+        if(typeof(options.contents) !== "string") {
+            callback(new Error("expected string for file contents"));
+            return;
         }
-
-        // Serialize buffer to a regular array
-        options.contents = options.contents.toJSON().data;
 
         this._executeRemoteCommand({
             commandCategory: "bramble",

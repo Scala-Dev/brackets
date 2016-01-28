@@ -6,7 +6,7 @@ define(function (require, exports, module) {
 
     var FileSystemError = require("filesystem/FileSystemError"),
         FileSystemStats = require("filesystem/FileSystemStats"),
-        Filer           = require("filesystem/impls/filer/BracketsFiler"),
+        BracketsFiler   = require("filesystem/impls/filer/BracketsFiler"),
         BlobUtils       = require("filesystem/impls/filer/BlobUtils"),
         decodePath      = require("filesystem/impls/filer/FilerUtils").decodePath,
         Handlers        = require("filesystem/impls/filer/lib/handlers"),
@@ -14,9 +14,15 @@ define(function (require, exports, module) {
         Async           = require("utils/Async"),
         BrambleEvents   = require("bramble/BrambleEvents");
 
-    var fs              = Filer.fs(),
-        Path            = Filer.Path,
+    var fs              = BracketsFiler.fs(),
+        Path            = BracketsFiler.Path,
         watchers        = {};
+
+    // We currently do *not* do write consistency checks, since only a single instance
+    // of the app tends to use a mounted path at a time in Bramble.  If you need to
+    // change this (e.g., multiple editor instances in different tabs sharing a project root),
+    // enable this.
+    var _doConsistencyCheck = false;
 
     var _changeCallback;            // Callback to notify FileSystem of watcher changes
 
@@ -316,7 +322,9 @@ define(function (require, exports, module) {
                 return;
             }
 
-            if (options.hasOwnProperty("expectedHash") && options.expectedHash !== stats._hash) {
+            if (_doConsistencyCheck                    &&
+                options.hasOwnProperty("expectedHash") &&
+                options.expectedHash !== stats._hash) {
                 console.error("Blind write attempted: ", path, stats._hash, options.expectedHash);
 
                 if (options.hasOwnProperty("expectedContents")) {
@@ -339,35 +347,33 @@ define(function (require, exports, module) {
         });
     }
 
-    function unlink(path, callback) {
-        path = decodePath(path);
-
-        fs.stat(path, function(err, stats) {
+    function _rmfr(path, callback) {
+        // Regardless of whether we're passed a file or dir path, recursively delete it all.
+        fs.rm(path, {recursive: true}, function(err) {
             if (err) {
                 callback(_mapError(err));
                 return;
             }
 
-            // Deal with dir vs. file
-            var fnName = stats.type === "DIRECTORY" ? 'rmdir' : 'unlink';
-            fs[fnName](path, function(err) {
-                // TODO: deal with the symlink case (i.e., only remove cache
-                // item if file is really going away).
-                BlobUtils.remove(path);
-
-                if(!err) {
-                    BrambleEvents.triggerFileRemoved(path);
-                }
-                callback(_mapError(err));
+            // TODO: deal with the symlink case (i.e., only remove cache
+            // item if file is really going away).
+            BlobUtils.remove(path).forEach(function(filename) {
+                BrambleEvents.triggerFileRemoved(filename);
             });
+
+            callback();
         });
+    }
+
+    function unlink(path, callback) {
+        path = decodePath(path);
+        _rmfr(path, callback);
     }
 
     function moveToTrash(path, callback) {
         path = decodePath(path);
-
         // TODO: do we want to support a .trash/ dir or the like?
-        unlink(path, callback);
+        _rmfr(path, callback);
     }
 
     function initWatchers(changeCallback, offlineCallback) {

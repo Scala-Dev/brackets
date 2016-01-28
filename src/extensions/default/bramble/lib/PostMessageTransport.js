@@ -21,7 +21,8 @@ define(function (require, exports, module) {
     // The script that will be injected into the previewed HTML to handle the other side of the post message connection.
     var PostMessageTransportRemote = require("text!lib/PostMessageTransportRemote.js");
     var Tutorial = require("lib/Tutorial");
-    var ScrollManager = require("lib/ScrollManager");
+    var MouseManager = require("lib/MouseManager");
+    var LinkManager = require("lib/LinkManager");
 
     // An XHR shim will be injected as well to allow XHR to the file system
     var XHRShim = require("text!lib/xhr/XHRShim.js");
@@ -67,7 +68,24 @@ define(function (require, exports, module) {
             return;
         }
 
-        if(msgObj.type === "message"){
+        if(msgObj.type === "message") {
+            // Deal with the case of a user clicking a <a> to navigate to a new file.
+            if(LinkManager.isNavigationRequest(msgObj.message)) {
+                LinkManager.navigate(msgObj.message);
+                return;
+            }
+
+            if(MouseManager.isHighlightLineRequest(msgObj.message)) {
+                MouseManager.highlightLine(msgObj.message);
+                return;
+            }
+
+            // Deal with user disabling Inspector via mouse click in preview
+            if(MouseManager.isDisableRequest(msgObj.message)) {
+                MouseManager.disableInspector();
+                return;
+            }
+
             if(msgObj.message) {
                 msgObj.message = resolveLinks(msgObj.message);
             }
@@ -76,6 +94,8 @@ define(function (require, exports, module) {
             module.exports.trigger("message", [connId, msgObj.message]);
         } else if (msgObj.type === "connect") {
             Browser.setListener();
+            // Make sure the correct mouse cursor is set, depending on inspector state.
+            MouseManager.ensurePreviewCursor();
         }
     }
 
@@ -174,7 +194,8 @@ define(function (require, exports, module) {
         return '<base href="' + window.location.href + '">\n' +
             "<script>\n" + PostMessageTransportRemote + "</script>\n" +
             "<script>\n" + XHRShim + "</script>\n" +
-            ScrollManager.getRemoteScript(currentPath);
+            MouseManager.getRemoteScript(currentPath) +
+            LinkManager.getRemoteScript();
     }
 
     // URL of document being rewritten/launched (if any)
