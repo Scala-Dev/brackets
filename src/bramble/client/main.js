@@ -549,7 +549,7 @@ define([
                         return callback(err);
                     }
 
-                    shell.rm(directory, {recursive: true}, callback);
+                    shell.rm(directory, {recursive: true}, genericFileEventFn("rmdir", path, callback));
                 });
             }
 
@@ -710,7 +710,7 @@ define([
                     // case of a non-recursive rm), call shell.rm immediately
                     // without triggering a `fileDelete` event
                     if(!contents || contents.length < 1 || !options.recursive) {
-                        return shell.rm(path, callback);
+                        return shell.rm(path, genericFileEventFn("rmdir", path, callback));
                     }
 
                     deleteDirectoryRecursively(path, callback);
