@@ -725,6 +725,15 @@ define(function (require, exports, module) {
     }
 
     /**
+     * XXXBramble: we allow passing extra file info to use when creating the file,
+     * including a basenamePrefix (or we'll use the default "Untitled"), an extension,
+     * and the file's initial contents.
+     */
+    function handleBrambleSelectFile(options) {
+        return FileViewController.openAndSelectDocument(options.fullPath, FileViewController.PROJECT_MANAGER);
+    }
+
+    /**
      * Create a new folder in the project tree.
      */
     function handleNewFolderInProject() {
@@ -1791,6 +1800,7 @@ define(function (require, exports, module) {
 
     // XXXBramble: support adding a new file with options
     CommandManager.registerInternal("bramble.addFile",                  handleBrambleNewFile);
+    CommandManager.registerInternal("bramble.selectFile",               handleBrambleSelectFile);
 
     // Listen for changes that require updating the editor titlebar
     ProjectManager.on("projectOpen", _updateTitle);

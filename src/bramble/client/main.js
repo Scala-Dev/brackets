@@ -901,5 +901,17 @@ define([
         this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_EXPORT"}, callback);
     };
 
+    BrambleProxy.prototype.refresh = function(callback) {
+        this._executeRemoteCommand({commandCategory: "bramble", command: "BRAMBLE_REFRESH_FILE"}, callback);
+    };
+
+    BrambleProxy.prototype.open = function(options, callback) {
+        this._executeRemoteCommand({
+            commandCategory: "bramble",
+            command: "BRAMBLE_OPEN_FILE",
+            args: [options]
+        }, callback);
+    }; // expects { fullPath: fileToOpen } as options
+
     return Bramble;
 });

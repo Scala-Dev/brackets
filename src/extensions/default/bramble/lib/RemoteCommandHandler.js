@@ -137,6 +137,12 @@ define(function (require, exports, module) {
             skipCallback = true;
             CommandManager.execute("bramble.addFile", args[0]).always(callback);
             break;
+        case "BRAMBLE_OPEN_FILE":
+            CommandManager.execute("bramble.selectFile", args[0]);
+            break;
+        case "BRAMBLE_REFRESH_FILE":
+            CommandManager.execute("file.refresh");
+            break;
         case "BRAMBLE_EXPORT":
             skipCallback = true;
             ArchiveUtils.archive(callback);
