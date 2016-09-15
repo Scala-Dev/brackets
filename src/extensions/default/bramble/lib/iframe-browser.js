@@ -102,7 +102,7 @@ define(function (require, exports, module) {
 
             if(iframe) {
                 if(shouldUseBlobURL) {
-                    iframe.src = urlOrHTML;
+                    iframe.contentWindow.location.replace(urlOrHTML);
                 } else {
                     doc = iframe.contentWindow.document.open("text/html", "replace");
                     doc.write(urlOrHTML);
